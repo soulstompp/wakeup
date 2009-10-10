@@ -1,0 +1,61 @@
+Fixes
+
+1.1 Was still referring to an old script wakeup_dev... Thanks to Tom Arnold for discovering that.
+
+
+Introduction
+This is another wakeup script for Asterisk. Why another one? Well, I 
+have seen some great solutions out there prior to this one. I was in 
+need of a solution that allowed for several calls though. I also wanted
+to get some experience with AGI on Asterisk. 
+This is a single script that does it all without any type of daemon, cron job or 
+similar. Just a perl script that works almost completely out of the outgoing 
+folder. I tried to make a clean solution with no dependencies outside of 
+regular Asterisk.
+
+
+Installation
+Just drop the script in /var/lib/asterisk/agi-bin/ (or wherever you have your
+agi scripts). Make it executable. Make sure the /var/spool/asterisk/outgoing
+and /var/spool/asterisk/wakeups exist with the correct permission.
+
+In your dial plan, do something along the lines...
+exten => *63,1,Answer
+exten => *63,2,AGI(jwakeup.agi)
+exten => *63,3,Hangup
+
+
+Features
+* Single script
+* No daemon, no crontab
+* Can schedule an unlimited amount of wakeup calls
+* Can list them and delete individual calls
+* Reoccurring wakeups as well as "one-time" wakeups
+* Snooze
+* Allows you to press keys in the middle of prompts
+
+Dependencies
+Asterisk 1.4 (could work on 1.2 as well, I am not sure)
+General perl with Time
+Unix touch command
+Core sounds and extra sounds
+
+How it works
+The program works almost completely out of the /var/spool/asterisk/outgoing
+directory (there is a use of /var/spool/asterisk/wakeups as well, but that is
+for temporary files and you could instead use /tmp if you want).
+The solution is based on typical Asterisk call files. If you don't run 
+asterisk as root, make sure you have write permissions in the above directories.
+The program uses the unix touch command to set the time of the wakeup. Make 
+sure the path to touch is correctly reflected in the program 
+(my $TOUCH = "/usr/bin/touch").
+
+Contact
+I am not setting out to further develop this script. If you find bugs please 
+let me know (jonas_arndt@comcast.net) and I might fix them :-) 
+I have been using this script myself for a couple of months so I am convinced
+that it runs fine. There might still be corner cases that I have not run into
+
+Thanks,
+
+// Jonas
