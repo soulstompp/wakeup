@@ -28,20 +28,29 @@
 
 use strict;
 
+#TODO: get a logger in place
+
+#TODO: use DateTime;
+
+#TODO: get the timezone from config or maybe the number?
 use Time::Local;
 
 #TODO: remember what the hell this does.
 $|=1;
 
+#TODO: get the timezone from a config file.
 my $DEBUG=1;
 
 # Setup some variables
+#TODO: round-up where agi[11] etc. is found.
 my %AGI; 
 
 # Some constants
 my $OUTDIR="/var/spool/asterisk/outgoing";
 my $WAKEDIR="/var/spool/asterisk/wakeups";
 my $debugfile="/tmp/agi_debug.log";
+
+#TODO: get rid of these.
 my $DEBUGOUT = "filehandle";
 my $CALL = "filehandle";
 
@@ -50,23 +59,22 @@ my $TOUCH = "/usr/bin/touch";
 
 # check_result - Use this to check the result of a sent command. I pretty much stole this from the regular agi-test.agi
 sub check_result {
-    my ($res) = @_;
+    my ($result) = @_;
 
-    my $retval;
+    chomp $result;
 
-    chomp $res;
+    if ($result =~ /^200/) {
+        $result =~ /result=(-?\d+)/;
 
-    if ($res =~ /^200/) {
-        $res =~ /result=(-?\d+)/;
-
+        #TODO: figure out a better name for $1
         if (!length($1)) {
-            print DEBUGOUT "FAIL ($res)\n";
+            print DEBUGOUT "FAIL ($result)\n";
             exit(1);
         } elsif ($DEBUG){
             print DEBUGOUT "PASS ($1)\n";
         }
     } else {
-        print STDERR "FAIL (unexpected result '$res')\n";
+        print STDERR "FAIL (unexpected result '$result')\n";
 
         exit(1);
     }
@@ -77,7 +85,7 @@ sub check_result {
 sub send_file {
     my ($myfile) = @_;
 
-    chomp($myfile);
+    chomp $myfile;
 
     if ($DEBUG) {
         print DEBUGOUT "Sending stream $myfile \n";
@@ -226,6 +234,7 @@ sub get_context {
  
     if ($aig[8] == '') {
         print STDERR "No extension found in function get_exension \n";
+
         return "FAIL";
     }
 
@@ -240,6 +249,7 @@ sub get_clid {
 
     if ($aig[1] == '') {
         print STDERR "No clid found in function get_clid \n";
+
         return "FAIL";
     }
   
@@ -263,63 +273,64 @@ sub init_agi {
 
 # ascii2num - Removes 48 to get a number out of the asciss return
 sub ascii2num {
-    my ($asc) = @_;
+    my ($ascii_string) = @_;
 
-    my $ret;
+    #TODO: understand why this is neccessary. 
+    my $number_string = $ascii_string - 48;
 
-    $ret = $asc - 48;
-
-    return $ret;
+    return $number;
 }
 
 
 # welcome  - This is the welcome menu
+#TODO: making generic menuing would be really nice and relatively easily.
 sub welcome {
-    my $ret = 0;
+    my $return_value = 0;
 
     #TODO: this is begging for exception handling
-    $ret = send_file("welcome");
+    $return_value = send_file("welcome");
 
-    if ($ret == 0) {
-        $ret = send_file("for-wakeup-call");
+    if ($return_value == 0) {
+        $return_value = send_file("for-wakeup-call");
     }
 
-    if ($ret == 0) {
-        $ret = send_file("press-1");
+    if ($return_value == 0) {
+        $return_value = send_file("press-1");
     }
 
-    if ($ret == 0) {
-        $ret = send_file("for-a-list-of");
+    if ($return_value == 0) {
+        $return_value = send_file("for-a-list-of");
     }
 
-    if ($ret == 0) {
+    if ($return_value == 0) {
         $ret = send_file("or");
     }
 
-    if ($ret == 0) {
-        $ret = send_file("to-cancel-wakeup");
+    if ($return_value == 0) {
+        $return_value = send_file("to-cancel-wakeup");
     }
 
-    if ($ret != 0) {
-        $ret = ascii2num($ret);
+    if ($return_value != 0) {
+        $return_value = ascii2num($ret);
     }
 
-    if ($ret == 0) {
-        $ret = get_data("press-2",1);
+    if ($return_value == 0) {
+        $return_value = get_data("press-2",1);
     }
 
-    if ($ret == 1) {
-        $ret = schedule_new();
-    } elsif ($ret == 2) {
+    if ($return_value == 1) {
+        $return_value = schedule_new();
+    } elsif ($return_value == 2) {
         manage_calls();
     } else {
-        $ret = send_file("goodbye");
+        $return_value = send_file("goodbye");
     }
 }
 
 # manage_calls - This is what is called if you want to manage already scheduled wakeup calls
+#TODO: delete is being overused here. This looks like it could cause problems with things being deleted due to files being missing, Or it could be the opposit, it makes things that confusing!
 sub manage_calls {
-    my ($del, $hours, $minutes);
+    my ($delete, $hours, $minutes);
 
     #TODO: checker of what exactly?
     my $checker = "false";
@@ -329,71 +340,69 @@ sub manage_calls {
 
     if ($#calls + 1 == 0) {
         #TODO: name improvement with legacy support. Change to: "not-requested-wakeup"
-        $del = send_file("not-rqsted-wakeup");
-        $del = send_file("goodbye");
+        $delete = send_file("not-rqsted-wakeup");
+        $delete = send_file("goodbye");
     } else {
-        foreach (@calls) {
-            $del = 0;
+        for my $wake_file_name (@calls) {
+            $delete = 0;
 
-            my $wakefile = $_;
-
-            my @wakeup = split /\./, $_;
+            my @wakeup = split /\./, $wake_file_name;
 
             #TODO: this needs to be a seperate method. This is the second time fixing it.
             my $time = $wakeup[0];
-            $_ = $time;
 
-            my ($hours, $minutes) = /^([0-9][0-9])([0-9][0-9])/;
+            my ($hours, $minutes) = $time =~ /^([0-9][0-9])([0-9][0-9])/;
 
             #TODO: name improvement with legacy support. Change to: "requested-wakeup-for"
-            $del = send_file("rqsted-wakeup-for");
+            $delete = send_file("rqsted-wakeup-for");
 
-            if ($del == 0) {
-                $del = say_number($hours);
+            if ($delete == 0) {
+                $delete = say_number($hours);
             }
 
-            if ($del == 0) {
+            if ($delete == 0) {
                 if ($minutes >= 10 ) {
-                    $del = say_number($minutes);
+                    $delete = say_number($minutes);
                 } elsif ($minutes > 0 && $minutes < 10) {
-                    $del = send_file("digits/oh");
-                    $del = say_number($minutes);
+                    $delete = send_file("digits/oh");
+                    $delete = say_number($minutes);
                 }
             }
 
-            if ($del == 0) {
+            if ($delete == 0) {
                 $del = send_file("digits/oclock");
             }
 
-            if ($del == 0) {
-                $del = send_file("to-cancel-wakeup");
+            if ($delete == 0) {
+                $delete = send_file("to-cancel-wakeup");
             }
 
-            if ($del == 0) {
-                $del = send_file("press-1");
+            if ($delete == 0) {
+                $delete = send_file("press-1");
             }
 
-            if ($del == 0) {
-                $del = send_file("otherwise-press");
+            if ($delete == 0) {
+                $delete = send_file("otherwise-press");
             }
 
-            if ($del != 0) {
-                $del = ascii2num($del);
+            if ($delete != 0) {
+                $delete = ascii2num($del);
             }
 
-            if ($del == 0) {
-                $del = get_data("digits/2",1);
+            if ($delete == 0) {
+                $delete = get_data("digits/2",1);
             }
 
-            if ($del == 1){
-                my @sysargs = ("rm", "-f", "$WAKEDIR/$wakefile", "$OUTDIR/$wakefile");
+            if ($delete == 1){
+                my @sys_args = ("rm", "-f", "$WAKEDIR/$wake_file_name", "$OUTDIR/$wake_file_name");
 
-                system(@sysargs) == 0 or die "system @sysargs failed: $?";
-                $del = send_file("cancelled");
+                system(@sys_args) == 0 or die "system @sys_args failed: $?";
+
+                $delete = send_file("cancelled");
             }
         }
 
-        $del = send_file("goodbye");
+        $delete = send_file("goodbye");
     }            
 }
 
@@ -526,7 +535,7 @@ sub schedule_new {
 sub get_time_string {
     my ($intime) = @_;
 
-    my ($tmpepoch, $day, $month, $ret_val);
+    my ($tmpepoch, $day, $month, $return_value);
 
     my $minutes = substr($intime, 2, 4);
     my $hours = substr($intime, 0, 2);
@@ -542,7 +551,7 @@ sub get_time_string {
     $tmpepoch = timelocal(@time_data);
 
     #Now compare them
-    if ($tmpepoch < $epoch) { # Means it is tomorrow
+    if ($tmpepoch < time) { # Means it is tomorrow
         $tmpepoch += 86400; # Add 24 hours
     }
 
@@ -571,16 +580,16 @@ sub get_time_string {
         $month = "0" . $month;
     }
 
-    $ret_val = $month . $day . $hours . $minutes;
+    $return_value = $month . $day . $hours . $minutes;
 
-    return $ret_val;    
+    return $return_value;    
 }
 
 # new_time - This will return the time string with a time set 10 minute into the future. The string is MMDDhhmi (¿comó?)
 sub new_time {
     my ($input) = @_;
 
-    my (@time_data, $minutes, $hours, $day, $month, $ret_val);
+    my (@time_data, $minutes, $hours, $day, $month, $return_value);
 
     my $epoc = time();
 
@@ -616,9 +625,9 @@ sub new_time {
         $month = "0" . $month;
     }
 
-    $ret_val = $month . $day . $hours . $minutes;
+    $return_value = $month . $day . $hours . $minutes;
 
-    return $ret_val;    
+    return $return_value;    
 }
 
 # snooze - This is the menu to snooze the wakeup call
@@ -628,7 +637,9 @@ sub snooze {
     my ($new_file, $extension, $context, $time, $return_dummy, $myprint);
 
     my @filestore = split (/\./, $old_file);
+
     my @permstore = split (/\./, $old_file);
+
     my $return_value = 0;
 
     # Answer the channel
